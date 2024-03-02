@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "firebaseauthproject",
+    "slug": "firebaseauthproject",
+    "version": "1.0.0",
+    "sdkVersion": "50.0.0",
+    "platforms": [
+      "ios",
+      "android"
+    ]
+  }
+}
