@@ -9,19 +9,25 @@ import homegrayIcon from "../../assets/homegrayIcon.png";
 import plantsgreenIcon from "../../assets/plantsgreenIcon.png";
 import settingsgreenIcon from "../../assets/settingsgreenIcon.png";
 import { FIREBASE_DB } from '../../config/FirebaseConfig';
-import { collection, getDocs } from 'firebase/firestore';
-
+import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import plant1 from "../../assets/Plant1.png";
 import plant2 from "../../assets/Plant2.png";
 import plant3 from "../../assets/Plant3.png";
+import plantPictures from "./PlantPictures";
 
 interface StartScreenState {
     fontLoaded: boolean;
-    plants: [],
+    plants: Plant[],
   }
+interface Plant {
+    plantName: string;
+    plantImage: string;
+}
   type Props = {
     navigation: NavigationProp<any>;
   };
+  
 
 export default class HomeScreen extends React.Component<Props, StartScreenState>{
     constructor(props) {
@@ -30,9 +36,35 @@ export default class HomeScreen extends React.Component<Props, StartScreenState>
         this.state = {
             fontLoaded: false,
             plants: [],
+
         };
       }
     
+      getUserDocID = async() => {
+        const userDocID = await AsyncStorage.getItem('userDocID');
+        return userDocID;
+    }
+    retrievePlantDocumentId = async (userDocId) => {
+        try {
+            // Get a reference to the user document
+            const userDocRef = doc(FIREBASE_DB, 'user', userDocId);
+    
+            // Read the document
+            const docSnap = await getDoc(userDocRef);
+    
+            if (docSnap.exists()) {
+            // Extract the documentID field
+            const documentID = docSnap.data().plantDocumentID;
+            console.log(documentID);
+            return documentID;
+            } else {
+            throw new Error('No such document!');
+            }
+        } catch (error) {
+            console.error("Error retrieving the document ID: ", error);
+            throw error; // Re-throw the error to handle it where the function is called
+        }
+        };
     
     async componentDidMount() {
         await Font.loadAsync({
@@ -62,17 +94,33 @@ export default class HomeScreen extends React.Component<Props, StartScreenState>
     {;
         this.props.navigation.navigate("AddPlantsScreen")
     }
-    handleViewPlantButton = () => {
-        this.props.navigation.navigate("ViewPlantScreen");
+    handleViewPlantButton = (index) => {
+        console.log("Plant card with index: ", index, "was clicked.");
+        this.props.navigation.navigate("ViewPlantScreen", {plantIndex: index});
     }
 
     fetchPlants = async () => {
         try {
-            const plantsCollectionRef = collection(FIREBASE_DB, 'user', 'USER_DOC_ID', 'plants')
-            const querySnapshot = await getDocs(plantsCollectionRef);
-            const plantsData = querySnapshot.docs.map(doc => ({
+            const userDocID = await this.getUserDocID();
+            const plantDocumentID = await this.retrievePlantDocumentId(userDocID);
+            console.log("This is the userDocID: " + userDocID);
+            console.log("This is the plantDocumentID: " + plantDocumentID);
+            const plantDocRef = doc(FIREBASE_DB, 'user', userDocID, 'plants', plantDocumentID);
+            const plantSnapShot = await getDoc(plantDocRef);
+            
+            if(plantSnapShot.exists()){
+                const plantData = plantSnapShot.data();
+                const plantNames = plantData.plantName;
+                const plantImages = plantData.plantImage;
+                console.log(plantImages);
 
-            }));
+                this.setState({
+                    plants: plantNames.map((name, index) => ({ // Assuming you have the same number of names and images
+                      plantName: name,
+                      plantImage: plantImages[index],
+                    }))
+                  });
+            }
         }
         catch (error) {
             console.error("Error fetching plants: ", error);
@@ -95,50 +143,24 @@ export default class HomeScreen extends React.Component<Props, StartScreenState>
                 <Text style = {styles.heading1}>
                     Plants
                 </Text>
-                <View style = {styles.gridContainer}>
-                <View style = {styles.plant1Container}>
-                    <Image source = {plant1}/>
-                    <Text style = {styles.plantName}>
-                        Plant 1
-                    </Text>
-                    <TouchableOpacity 
-                        style = {styles.viewplantButton} 
-                        onPress = {this.handleViewPlantButton}>
-                        <Text style = {styles.viewplantText}>
-                            View Plant
-                        </Text>
-                    </TouchableOpacity>
-                </View>
-                <View style = {styles.plant1Container}>
-                    <Image source = {plant2}/>
-                    <Text style = {styles.plantName}>
-                        Plant 2
-                    </Text>
-                    <TouchableOpacity 
+                <View style={styles.gridContainer}>
+                    {this.state.plants.map((plant, index) => (
+                    <View key={index} style={styles.plant1Container}>
+                        <Image source={plantPictures[plant.plantImage]} style = {styles.plantImage} />
+                        <Text style={styles.plantName}>{plant.plantName}</Text>
+                        <TouchableOpacity 
                         style = {styles.viewplantButton}
-                        onPress = {this.handleViewPlantButton}>
+                        onPress = {() => this.handleViewPlantButton(index)}>
                         <Text style = {styles.viewplantText}>
                             View Plant
                         </Text>
                     </TouchableOpacity>
-                </View>
-                <View style = {styles.plant1Container}>
-                    <Image source = {plant2}/>
-                    <Text style = {styles.plantName}>
-                        Plant 2
-                    </Text>
-                    <TouchableOpacity 
-                        style = {styles.viewplantButton}
-                        onPress = {this.handleViewPlantButton}>
-                        <Text style = {styles.viewplantText}>
-                            View Plant
-                        </Text>
-                    </TouchableOpacity>
+                    </View>
+                    
+                    ))}
                 </View>
                 
                 
-                
-                </View>
             </ScrollView>
 
             <TouchableOpacity
@@ -308,5 +330,10 @@ const styles = StyleSheet.create({
         fontSize: 24, // Size of the '+' icon
         fontFamily: 'Lato-Bold', // Font of the '+' icon
       },
+      plantImage: {
+        height: 145, 
+        width: 145,
+        borderRadius: 8
+      }
       
 })

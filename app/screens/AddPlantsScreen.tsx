@@ -33,9 +33,27 @@ const AddPlantsScreen = ({navigation}: RouterProps) => {
             //const plantsCollectionRef = collection(FIREBASE_DB, `user/${userDocID}/plants`);
             const plantDocRef = doc(FIREBASE_DB, 'user', userDocID2, 'plants', userDocumentID);
             const randomIndex = getRandomInt(0, plantPictures.length - 1); // Adjusted to the length of your array
-            const randomPlantPicture = plantPictures[randomIndex];
+            const docSnap = await getDoc(plantDocRef);
             console.log(randomIndex);
             // Update the document with the new plant input
+            let plantsArray = [];
+
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                plantsArray = data.plants || []; // Use existing plants array or initialize if it doesn't exist
+            }
+            const newPlant = {
+                plantName: plantInput,
+                plantImage: randomIndex,
+                plantPH: [0, 0] // Assuming you want to start with an empty array for plantPH
+            };
+            plantsArray.push(newPlant);
+            console.log(newPlant);
+
+        // Update the document with the new array of plants
+            await updateDoc(plantDocRef, {
+                plants: plantsArray
+            });
             updateDoc(plantDocRef, {
             plantName: arrayUnion(plantInput),
             plantImage: arrayUnion(randomIndex),

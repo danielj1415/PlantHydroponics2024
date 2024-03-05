@@ -1,7 +1,7 @@
 import React from 'react';
 import { Image, Text, View, ScrollView,Button, TouchableOpacity, TextInput, Touchable, StyleSheet } from 'react-native';
 import * as Font from 'expo-font';
-import { NavigationProp } from '@react-navigation/native';
+import { NavigationProp, RouteProp } from '@react-navigation/native';
 import homegreenIcon from "../../assets/homegreenIcon.png";
 import plantsgrayIcon from "../../assets/plantsgrayIcon.png";
 import settingsgrayIcon from "../../assets/settingsgrayIcon.png";
@@ -9,14 +9,24 @@ import homegrayIcon from "../../assets/homegrayIcon.png";
 import plantsgreenIcon from "../../assets/plantsgreenIcon.png";
 import settingsgreenIcon from "../../assets/settingsgreenIcon.png";
 import backarrowIcon from "../../assets/backarrowIcon.png";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { FIREBASE_DB } from '../../config/FirebaseConfig';
+import { collection, doc, getDoc, getDocs, updateDoc } from 'firebase/firestore';
 
 interface StartScreenState {
     fontLoaded: boolean;
-  
+    plantNum: number;
+    plantName: string;
+    plantArray: number[];
+  }
+  type ViewPlantScreenRouteProps = {
+    plantIndex: number;
   }
   type Props = {
     navigation: NavigationProp<any>;
+    route: RouteProp<{params: ViewPlantScreenRouteProps}, 'params'>;
   };
+  
 
 export default class HomeScreen extends React.Component<Props, StartScreenState>{
     pressInterval: any;
@@ -25,6 +35,10 @@ export default class HomeScreen extends React.Component<Props, StartScreenState>
     
         this.state = {
             fontLoaded: false,
+            plantNum: null,
+            plantName: "",
+            plantArray: [],
+
         };
         this.pressInterval = null;
       }
@@ -42,6 +56,9 @@ export default class HomeScreen extends React.Component<Props, StartScreenState>
         });
     
         this.setState({ fontLoaded: true });
+        const {plantIndex} = this.props.route.params;
+        console.log("Received plant index: ", plantIndex);
+        this.fetchPlantName(plantIndex);
     }
     handlePress = () => {
         this.props.navigation.goBack();
@@ -61,36 +78,143 @@ export default class HomeScreen extends React.Component<Props, StartScreenState>
     handlePHButtonPress = () => {
         console.log('Add PH Button long pressed.');
     }
-    startLoggingWater = () => {
-        console.log('Water Button is being pressed...'); // Initial log
+    fetchPlantName = async (plantIndex) => {
+        const userDocID = await AsyncStorage.getItem('userDocID');
+        const userDocRef = doc(FIREBASE_DB, 'user', userDocID);
+        const docSnap = await getDoc(userDocRef);
+        const plantDocumentID = docSnap.data().plantDocumentID;
+        const plantDocRef = doc(FIREBASE_DB, 'user', userDocID, 'plants', plantDocumentID);
+        const plantSnapShot = await getDoc(plantDocRef);
+        const plantData = plantSnapShot.data();
+        const plantNames = plantData.plantName;
+        const plantName  = plantNames[plantIndex];
+        const plantObject = plantData.plants[plantIndex];
+        const plantObjectName = plantObject.plantName;
+        const plantObjectImage = plantObject.plantImage;
+        const plantObjectArray = plantObject.plantPH;
+        
+        this.setState({
+            plantName: plantName,
+            plantNum: plantIndex
+        })
+    }
+    fetchPlantArray = async (plantIndex) =>{
+        const userDocID = await AsyncStorage.getItem('userDocID');
+        const userDocRef = doc(FIREBASE_DB, 'user', userDocID);
+        const docSnap = await getDoc(userDocRef);
+        const plantDocumentID = docSnap.data().plantDocumentID;
+        const plantDocRef = doc(FIREBASE_DB, 'user', userDocID, 'plants', plantDocumentID);
+        const plantSnapShot = await getDoc(plantDocRef);
+        const plantData = plantSnapShot.data();
+        const plantNames = plantData.plantName;
+        const plantObject = plantData.plants[plantIndex];
+        const plantObjectArray = plantObject.plantPH;
+        return plantObjectArray;
+    }
+    startLoggingWater = async() => {
+        console.log('Water Button is being pressed for this plant: ' + this.state.plantName + ' that has this index: ' + this.state.plantNum); // Initial log
+        if(this.pressInterval){
+            return;
+        }
+        const userDocID = await AsyncStorage.getItem('userDocID');
+        const userDocRef = doc(FIREBASE_DB, 'user', userDocID);
+        const docSnap = await getDoc(userDocRef);
+        const plantDocumentID = docSnap.data().plantDocumentID;
+        const plantDocRef = doc(FIREBASE_DB, 'user', userDocID, 'plants', plantDocumentID);
+        const plantSnapShot = await getDoc(plantDocRef);
         // Start an interval that logs to the console every 500ms
-        this.pressInterval = setInterval(() => {
-          console.log('Water Button is still being pressed...');
-        }, 500);
+        this.pressInterval = setInterval(async () => {
+            console.log('Water Button is still being pressed...');
+            if (plantSnapShot.exists()) {
+                const plantData = plantSnapShot.data();
+                let plantsArray = plantData.plants;
+                  plantsArray[this.state.plantNum].plantPH[1] = 1 // Adding the value '1'
+                  await updateDoc(plantDocRef, {
+                    plants: plantsArray
+                  });
+                
+              } else {
+                console.error('Document does not exist!');
+                clearInterval(this.pressInterval); // Stop the interval if document does not exist
+              }
+          }, 500);
       };
     
-    stopLoggingWater = () => {
-        console.log('Water Button was released.');
+    stopLoggingWater = async () => {
+        console.log('Water Button was released for this plant: '+ this.state.plantName + ' that has this index: ' + this.state.plantNum);
         if (this.pressInterval) {
-          clearInterval(this.pressInterval); // Clear the interval when the button is released
-          this.pressInterval = null; // Reset the interval variable
+            clearInterval(this.pressInterval); // Clear the interval when the button is released
+            this.pressInterval = null; // Reset the interval variable
+
+            const userDocID = await AsyncStorage.getItem('userDocID');
+            const userDocRef = doc(FIREBASE_DB, 'user', userDocID);
+            const docSnap = await getDoc(userDocRef);
+            const plantDocumentID = docSnap.data().plantDocumentID;
+            const plantDocRef = doc(FIREBASE_DB, 'user', userDocID, 'plants', plantDocumentID);
+            const plantSnapShot = await getDoc(plantDocRef);
+
+            if (plantSnapShot.exists()) {
+                const plantData = plantSnapShot.data();
+                let plantsArray = plantData.plants;
+                  plantsArray[this.state.plantNum].plantPH[1] = 0 // Adding the value '1'
+                  await updateDoc(plantDocRef, {
+                    plants: plantsArray
+                  });
+            } 
         }
       };
-      startLoggingPH = () => {
-        console.log('PH Button is being pressed...'); // Initial log
+      stopLoggingPH = async() => {
+        console.log('PH Button was released for this plant: '+ this.state.plantName + ' that has this index: ' + this.state.plantNum);
+        if (this.pressInterval) {
+            clearInterval(this.pressInterval); // Clear the interval when the button is released
+            this.pressInterval = null; // Reset the interval variable
+
+            const userDocID = await AsyncStorage.getItem('userDocID');
+            const userDocRef = doc(FIREBASE_DB, 'user', userDocID);
+            const docSnap = await getDoc(userDocRef);
+            const plantDocumentID = docSnap.data().plantDocumentID;
+            const plantDocRef = doc(FIREBASE_DB, 'user', userDocID, 'plants', plantDocumentID);
+            const plantSnapShot = await getDoc(plantDocRef);
+
+            if (plantSnapShot.exists()) {
+                const plantData = plantSnapShot.data();
+                let plantsArray = plantData.plants;
+                  plantsArray[this.state.plantNum].plantPH[0] = 0 // Adding the value '1'
+                  await updateDoc(plantDocRef, {
+                    plants: plantsArray
+                  });
+            } 
+        }
+      };
+      startLoggingPH = async() => {
+        if(this.pressInterval){
+            return;
+        }
+        console.log('PH Button is being pressed for this plant: ' + this.state.plantName + ' that has this index: ' + this.state.plantNum); // Initial log
+        const userDocID = await AsyncStorage.getItem('userDocID');
+        const userDocRef = doc(FIREBASE_DB, 'user', userDocID);
+        const docSnap = await getDoc(userDocRef);
+        const plantDocumentID = docSnap.data().plantDocumentID;
+        const plantDocRef = doc(FIREBASE_DB, 'user', userDocID, 'plants', plantDocumentID);
+        const plantSnapShot = await getDoc(plantDocRef);
         // Start an interval that logs to the console every 500ms
-        this.pressInterval = setInterval(() => {
-          console.log('PH Button is still being pressed...');
-        }, 500);
+        this.pressInterval = setInterval(async () => {
+            console.log('PH Button is still being pressed...');
+            if (plantSnapShot.exists()) {
+                const plantData = plantSnapShot.data();
+                let plantsArray = plantData.plants;
+                  plantsArray[this.state.plantNum].plantPH[0] = 1 // Adding the value '1'
+                  await updateDoc(plantDocRef, {
+                    plants: plantsArray
+                  });
+                
+              } else {
+                console.error('Document does not exist!');
+                clearInterval(this.pressInterval); // Stop the interval if document does not exist
+              }
+          }, 500);
       };
-    
-    stopLoggingPH = () => {
-        console.log('PH Button was released.');
-        if (this.pressInterval) {
-          clearInterval(this.pressInterval); // Clear the interval when the button is released
-          this.pressInterval = null; // Reset the interval variable
-        }
-      };
+
     render() {
         if (!this.state.fontLoaded) {
             return null; // or a loading indicator
@@ -104,7 +228,7 @@ export default class HomeScreen extends React.Component<Props, StartScreenState>
             overScrollMode="never"
             >
                 <Text style = {styles.heading1}>
-                    Plant Name
+                    {this.state.plantName + " " + this.state.plantNum}
                 </Text>
                 <View style = {styles.buttonContainer}>
                     <TouchableOpacity 
